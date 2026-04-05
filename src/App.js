@@ -25,162 +25,262 @@
 // export default App;
 
 import React from "react";
-import Lists from "./Lists";
-import CreateList from "./CreateList";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "./App.css";
 
 class App extends React.Component {
-    constructor(props) {
-      super(props);
-      this.state = {
-        loading: false,
-        alldata: [],
-        singledata: {
-          title: "",
-          author: ""
-        }
-      };
-    }
-
-    handleChange = (event) => {
-      let title = this.state.singledata.title;
-      let author = this.state.singledata.author;
-      if (event.target.name === "title") title = event.target.value;
-      else author = event.target.value;
-
-      this.setState({
-        singledata: {
-          title: title,
-          author: author
-        }
-      });
-    }
-
-    createList = () => {
-      fetch("http://localhost:5001/posts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(this.state.singledata)
-      }).then(
-        this.setState({
-          singledata: {
-            title: "",
-            author: ""
-          }
-        })
-      );
-    }
-
-    getList = (event, id) => {
-      this.setState(
-        {
-          singledata: {
-            title: "Loading...",
-            author: "Loading..."
-          }
-        },
-        () => {
-          fetch("http://localhost:5001/posts/" + id)
-            .then(res => res.json())
-            .then(result => {
-              this.setState({
-                singledata: {
-                  title: result.title,
-                  author: result.author ? result.author : ""
-                }
-              });
-            });
-        }
-      );
-    }
-
-    updateList = (event, id) => {
-      fetch("http://localhost:5001/posts/" + id, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(this.state.singledata)
-      })
-        .then(res => res.json())
-        .then(result => {
-          this.setState({
-            singledata: {
-              title: "",
-              author: ""
-            }
-          });
-          this.getLists();
-        });
-    }
-
-    deleteList = (event, id) => {
-      fetch("http://localhost:5001/posts/" + id, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      })
-        .then(res => res.json())
-        .then(result => {
-          this.setState({
-            singledata: {
-              title: "",
-              author: ""
-            }
-          });
-          this.getLists();
-        });
-    }
-
-    getLists = () => {
-      this.setState({ loading: true });
-
-      fetch("http://localhost:5001/posts")
-        .then((res) => res.json())
-        .then((result) =>
-          this.setState({
-            loading: false,
-            alldata: result
-          })
-        )
-        .catch((error) => {
-          console.log(error);
-          this.setState({ loading: false });
-        });
+  constructor(props) {
+    super(props);
+    this.state = {
+      loading: false,
+      books: [],
+      mode: "list",
+      selectedId: null,
+      form: {
+        title: "",
+        author: "",
+      },
+      error: "",
     };
-
-    render() {
-      const listTable = this.state.loading ? (
-        <span>Loading Data......Please be patience.</span>
-      ) : (
-        <Lists
-          alldata={this.state.alldata}
-          singledata={this.state.singledata}
-          getList={this.getList}
-          updateList={this.updateList}
-          deleteList={this.deleteList}
-          handleChange={this.handleChange}
-        />
-      );
-
-      return (
-        <div className="container">
-          <span className="title-bar">Book List</span>
-          <br />
-          <button type="button" className="btn btn-primary" onClick={this.getLists}>
-            Get Lists
-          </button>
-          <CreateList
-            singledata={this.state.singledata}
-            handleChange={this.handleChange}
-            createList={this.createList}
-          />
-          {listTable}
-        </div>
-      );
-    }
   }
+
+  componentDidMount() {
+    this.getBooks();
+  }
+
+  apiBase = process.env.REACT_APP_API_URL || "http://localhost:5001";
+
+  handleChange = (event) => {
+    const { name, value } = event.target;
+    this.setState((prevState) => ({
+      form: {
+        ...prevState.form,
+        [name]: value,
+      },
+    }));
+  };
+
+  getBooks = () => {
+    this.setState({ loading: true, error: "" });
+
+    fetch(`${this.apiBase}/books`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Unable to load books.");
+        }
+        return res.json();
+      })
+      .then((result) => {
+        this.setState({ loading: false, books: result });
+      })
+      .catch((error) => {
+        this.setState({ loading: false, error: error.message });
+      });
+  };
+
+  startAdd = () => {
+    this.setState({
+      mode: "add",
+      selectedId: null,
+      form: { title: "", author: "" },
+      error: "",
+    });
+  };
+
+  startEdit = (book) => {
+    this.setState({
+      mode: "edit",
+      selectedId: book._id,
+      form: {
+        title: book.title,
+        author: book.author,
+      },
+      error: "",
+    });
+  };
+
+  cancelForm = () => {
+    this.setState({
+      mode: "list",
+      selectedId: null,
+      form: { title: "", author: "" },
+      error: "",
+    });
+  };
+
+  createBook = (event) => {
+    event.preventDefault();
+    fetch(`${this.apiBase}/books`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(this.state.form),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Unable to create book.");
+        }
+        return res.json();
+      })
+      .then(() => {
+        this.cancelForm();
+        this.getBooks();
+      })
+      .catch((error) => {
+        this.setState({ error: error.message });
+      });
+  };
+
+  updateBook = (event) => {
+    event.preventDefault();
+    if (!this.state.selectedId) {
+      return;
+    }
+
+    fetch(`${this.apiBase}/books/${this.state.selectedId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(this.state.form),
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Unable to update book.");
+        }
+        return res.json();
+      })
+      .then(() => {
+        this.cancelForm();
+        this.getBooks();
+      })
+      .catch((error) => {
+        this.setState({ error: error.message });
+      });
+  };
+
+  deleteBook = (id) => {
+    fetch(`${this.apiBase}/books/${id}`, {
+      method: "DELETE",
+    })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Unable to delete book.");
+        }
+        return res.json();
+      })
+      .then(() => {
+        this.getBooks();
+      })
+      .catch((error) => {
+        this.setState({ error: error.message });
+      });
+  };
+
+  renderForm = () => {
+    if (this.state.mode === "list") {
+      return null;
+    }
+
+    const isEdit = this.state.mode === "edit";
+
+    return (
+      <div className="book-form-wrapper">
+        <h2>{isEdit ? "Edit Book" : "Add Book"}</h2>
+        <form onSubmit={isEdit ? this.updateBook : this.createBook}>
+          <div className="mb-3">
+            <label htmlFor="title" className="form-label">Book Title</label>
+            <input
+              id="title"
+              type="text"
+              name="title"
+              className="form-control"
+              value={this.state.form.title}
+              onChange={this.handleChange}
+              required
+            />
+          </div>
+          <div className="mb-3">
+            <label htmlFor="author" className="form-label">Author</label>
+            <input
+              id="author"
+              type="text"
+              name="author"
+              className="form-control"
+              value={this.state.form.author}
+              onChange={this.handleChange}
+              required
+            />
+          </div>
+          <button type="submit" className="btn btn-primary me-2">Save</button>
+          <button type="button" className="btn btn-secondary" onClick={this.cancelForm}>
+            Cancel
+          </button>
+        </form>
+      </div>
+    );
+  };
+
+  renderList = () => {
+    if (this.state.loading) {
+      return <p>Loading books...</p>;
+    }
+
+    return (
+      <div>
+        <h2>Book List</h2>
+        <table className="table table-striped">
+          <thead>
+            <tr>
+              <th>Book Title</th>
+              <th>Author</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {this.state.books.map((book) => (
+              <tr key={book._id}>
+                <td>{book.title}</td>
+                <td>{book.author}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn btn-info btn-sm me-2"
+                    onClick={() => this.startEdit(book)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-warning btn-sm"
+                    onClick={() => this.deleteBook(book._id)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  render() {
+    return (
+      <div className="app-page">
+          {this.state.error && <div className="alert alert-danger">{this.state.error}</div>}
+          {this.state.mode === "list" && (
+            <button type="button" className="btn btn-primary mb-4" onClick={this.startAdd}>
+              Add Book
+            </button>
+          )}
+          {this.renderForm()}
+          {this.state.mode === "list" && this.renderList()}
+      </div>
+    );
+  }
+}
 
 export default App;
